@@ -9,11 +9,6 @@ import (
 	"path"
 )
 
-const PROJECT_ROOT = "/Users/arnsong/GolandProjects/arnid/"
-const BUILD_TARGET_PATH = PROJECT_ROOT + "public/"
-const TEMPLATES_PATH = PROJECT_ROOT + "templates/"
-const CONTENT_PATH = PROJECT_ROOT + "content/"
-
 type HandleFunction func(writer http.ResponseWriter, request *http.Request)
 
 type apiHandler struct {

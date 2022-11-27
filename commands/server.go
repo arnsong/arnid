@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -75,7 +76,7 @@ func rootHandlerFunc(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		filename := "index.html"
-		indexPath := path.Join(BUILD_TARGET_PATH, filename)
+		indexPath := path.Join(viper.GetString("project_root"), viper.GetString("target"), filename)
 
 		f, err := ioutil.ReadFile(indexPath)
 		if err != nil {
@@ -94,10 +95,12 @@ func apiHandlerFunc(w http.ResponseWriter, r *http.Request) {
 }
 
 func indexHandlerFunc(w http.ResponseWriter, r *http.Request) {
+	getConfig()
+
 	switch r.Method {
 	case http.MethodGet:
 		filename := "index.html"
-		indexPath := path.Join(BUILD_TARGET_PATH, r.URL.Path, filename)
+		indexPath := path.Join(viper.GetString("project_root"), viper.GetString("target"), r.URL.Path, filename)
 
 		f, err := ioutil.ReadFile(indexPath)
 		if err != nil {
@@ -106,4 +109,10 @@ func indexHandlerFunc(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Fprint(w, string(f))
 	}
+}
+
+func getConfig() {
+	viper.SetConfigFile("config.yaml")
+	viper.AddConfigPath(".")
+	viper.ReadInConfig()
 }

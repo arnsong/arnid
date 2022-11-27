@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
 	meta "github.com/yuin/goldmark-meta"
@@ -17,6 +18,15 @@ import (
 	"sort"
 	"time"
 )
+
+type Config struct {
+	Params map[string]string
+}
+
+type Page struct {
+	name string
+	url  string
+}
 
 type PageData struct {
 	Title      string
@@ -38,22 +48,51 @@ var buildCmd = &cobra.Command{
 }
 
 func buildSite() {
-	buildFrontPage()
-	buildAboutPage()
-	buildCvPage()
-	buildProjectsPage()
-	buildBlogPage()
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.ReadInConfig()
+
+	projectRoot := viper.GetString("project_root")
+	cfg := Config{
+		Params: map[string]string{
+			"target":    path.Join(projectRoot, viper.GetString("target")),
+			"templates": path.Join(projectRoot, viper.GetString("templates")),
+			"content":   path.Join(projectRoot, viper.GetString("content")),
+		},
+	}
+
+	pages := []Page{
+		{"front_page", ""},
+		{"about", "about"},
+		{"cv", "cv"},
+		{"projects", "projects"},
+	}
+
+	for _, page := range pages {
+		buildPage(page.name, page.url, cfg)
+	}
+	buildBlogPage(cfg)
 }
 
-func buildFrontPage() {
-	f, err := os.Create(path.Join(BUILD_TARGET_PATH, "index.html"))
+func buildPage(pageName, url string, cfg Config) {
+	buildPath := path.Join(cfg.Params["target"], url, "index.html")
 
-	tmpl := template.New("frontPage")
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "index.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
+	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
+		if err := os.Mkdir(path.Dir(buildPath), 0770); err != nil {
+			log.Printf("Error creating directory: %s", buildPath)
+		}
+	}
 
-	content := template.HTML(parseMarkdown(path.Join(CONTENT_PATH, "front_page.md")))
+	f, err := os.Create(buildPath)
+
+	tmpl := template.New(pageName)
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "index.html")))
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "header.html")))
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "content.html")))
+
+	content := template.HTML(parseMarkdown(path.Join(cfg.Params["content"], pageName+".md")))
 
 	err = tmpl.ExecuteTemplate(f, "index", PageData{
 		Title:     "Welcome!",
@@ -66,93 +105,9 @@ func buildFrontPage() {
 	}
 }
 
-func buildAboutPage() {
-	buildPath := path.Join(BUILD_TARGET_PATH, "about", "index.html")
+func buildBlogPage(cfg Config) {
 
-	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
-		if err := os.Mkdir(path.Dir(buildPath), 0770); err != nil {
-			log.Printf("Error creating directory: %s", buildPath)
-		}
-	}
-
-	f, err := os.Create(buildPath)
-
-	if err != nil {
-		log.Println("Error building about page")
-	}
-
-	tmpl := template.New("frontPage")
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "index.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
-
-	content := template.HTML(parseMarkdown(path.Join(CONTENT_PATH, "about.md")))
-
-	err = tmpl.ExecuteTemplate(f, "index", PageData{
-		Title:     "Welcome!",
-		SiteTitle: "Arnold Song",
-		Content:   content,
-	})
-
-}
-
-func buildCvPage() {
-	buildPath := path.Join(BUILD_TARGET_PATH, "cv", "index.html")
-
-	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
-		if err := os.Mkdir(path.Dir(buildPath), 0770); err != nil {
-			log.Printf("Error creating directory: %s", buildPath)
-		}
-	}
-
-	f, err := os.Create(buildPath)
-
-	if err != nil {
-		log.Println("Error building cv page")
-	}
-
-	tmpl := template.New("frontPage")
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "index.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
-
-	err = tmpl.ExecuteTemplate(f, "index", PageData{
-		Title:     "Welcome!",
-		SiteTitle: "Arnold Song",
-		Content:   template.HTML(parseMarkdown(path.Join(CONTENT_PATH, "cv.md"))),
-	})
-}
-
-func buildProjectsPage() {
-	buildPath := path.Join(BUILD_TARGET_PATH, "projects", "index.html")
-
-	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
-		if err := os.Mkdir(path.Dir(buildPath), 0770); err != nil {
-			log.Printf("Error creating directory: %s", buildPath)
-		}
-	}
-
-	f, err := os.Create(buildPath)
-
-	if err != nil {
-		log.Println("Error building projects page")
-	}
-
-	tmpl := template.New("frontPage")
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "index.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
-
-	err = tmpl.ExecuteTemplate(f, "index", PageData{
-		Title:     "Welcome!",
-		SiteTitle: "Arnold Song",
-		Content:   "All of my projects",
-	})
-}
-
-func buildBlogPage() {
-
-	buildPath := path.Join(BUILD_TARGET_PATH, "blog", "index.html")
+	buildPath := path.Join(cfg.Params["target"], "blog", "index.html")
 
 	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
 		if err := os.Mkdir(path.Dir(buildPath), 0770); err != nil {
@@ -167,11 +122,11 @@ func buildBlogPage() {
 	}
 
 	tmpl := template.New("frontPage")
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "index.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
-	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "index.html")))
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "header.html")))
+	tmpl = template.Must(tmpl.ParseFiles(path.Join(cfg.Params["templates"], "content.html")))
 
-	titlesByTimestamp := buildList(path.Join(CONTENT_PATH, "blog"))
+	titlesByTimestamp := buildList(path.Join(cfg.Params["content"], "blog"))
 
 	titles := make([]string, 0)
 	for _, titleWithTimestamp := range titlesByTimestamp {

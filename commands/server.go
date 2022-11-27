@@ -56,6 +56,9 @@ func createHandler(path string) {
 	case "":
 		url = "/"
 		h.handler = rootHandlerFunc
+	case "api":
+		url = "/" + path + "/"
+		h.handler = apiHandlerFunc
 	default:
 		url = "/" + path + "/"
 		h.handler = indexHandlerFunc
@@ -80,6 +83,13 @@ func rootHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		}
 
 		fmt.Fprint(w, string(f))
+	}
+}
+
+func apiHandlerFunc(w http.ResponseWriter, r *http.Request) {
+	switch path.Base(r.URL.Path) {
+	case "menu":
+		log.Printf("Give me the menu!!!")
 	}
 }
 

@@ -6,12 +6,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
+	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+	"sort"
+	"time"
 )
 
 type PageData struct {
@@ -19,6 +23,11 @@ type PageData struct {
 	SiteTitle  string
 	Content    template.HTML
 	PostTitles []string
+}
+
+type TitleWithTimestamp struct {
+	Title     string
+	Timestamp time.Time
 }
 
 var buildCmd = &cobra.Command{
@@ -99,7 +108,7 @@ func buildCvPage() {
 	f, err := os.Create(buildPath)
 
 	if err != nil {
-		log.Println("Error building blog page")
+		log.Println("Error building cv page")
 	}
 
 	tmpl := template.New("frontPage")
@@ -110,7 +119,7 @@ func buildCvPage() {
 	err = tmpl.ExecuteTemplate(f, "index", PageData{
 		Title:     "Welcome!",
 		SiteTitle: "Arnold Song",
-		Content:   "My work experience!!",
+		Content:   template.HTML(parseMarkdown(path.Join(CONTENT_PATH, "cv.md"))),
 	})
 }
 
@@ -126,7 +135,7 @@ func buildProjectsPage() {
 	f, err := os.Create(buildPath)
 
 	if err != nil {
-		log.Println("Error building blog page")
+		log.Println("Error building projects page")
 	}
 
 	tmpl := template.New("frontPage")
@@ -142,6 +151,7 @@ func buildProjectsPage() {
 }
 
 func buildBlogPage() {
+
 	buildPath := path.Join(BUILD_TARGET_PATH, "blog", "index.html")
 
 	if _, err := os.Stat(path.Dir(buildPath)); err != nil {
@@ -161,14 +171,67 @@ func buildBlogPage() {
 	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "header.html")))
 	tmpl = template.Must(tmpl.ParseFiles(path.Join(TEMPLATES_PATH, "content.html")))
 
+	titlesByTimestamp := buildList(path.Join(CONTENT_PATH, "blog"))
+
+	titles := make([]string, 0)
+	for _, titleWithTimestamp := range titlesByTimestamp {
+		titles = append(titles, titleWithTimestamp.Title)
+	}
+
 	err = tmpl.ExecuteTemplate(f, "index", PageData{
-		Title:     "Welcome!",
-		SiteTitle: "Arnold Song",
-		PostTitles: []string{
-			"Post 1", "Post 2", "Post 3",
-		},
+		Title:      "Welcome!",
+		SiteTitle:  "Arnold Song",
+		PostTitles: titles,
 	})
 
+}
+
+func buildList(pathname string) []TitleWithTimestamp {
+
+	files, err := ioutil.ReadDir(pathname)
+	if err != nil {
+		log.Printf("Error reading %s", pathname)
+	}
+
+	titlesByTimestamp := make([]TitleWithTimestamp, 0)
+	for _, file := range files {
+		metadata := parseMetadata(path.Join(pathname, file.Name()))
+		postTitle := fmt.Sprintf("%s", metadata["Title"])
+		timestamp, _ := time.Parse(time.RFC3339, fmt.Sprintf("%s", metadata["Timestamp"]))
+		titlesByTimestamp = append(titlesByTimestamp,
+			TitleWithTimestamp{
+				Title:     postTitle,
+				Timestamp: timestamp,
+			},
+		)
+	}
+
+	// Sort titles by time
+	sort.Slice(titlesByTimestamp, func(i, j int) bool {
+		return titlesByTimestamp[i].Timestamp.After(titlesByTimestamp[j].Timestamp)
+	})
+
+	return titlesByTimestamp
+}
+
+func parseMetadata(filename string) map[string]interface{} {
+	content, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Printf("Error reading %s", filename)
+	}
+
+	markdown := goldmark.New(
+		goldmark.WithExtensions(
+			meta.Meta,
+		),
+	)
+
+	var buf bytes.Buffer
+	context := parser.NewContext()
+	if err = markdown.Convert(content, &buf, parser.WithContext(context)); err != nil {
+		log.Println("Error converting to markdown")
+	}
+	return meta.Get(context)
 }
 
 func parseMarkdown(filename string) string {
@@ -178,16 +241,23 @@ func parseMarkdown(filename string) string {
 		goldmark.WithExtensions(
 			emoji.Emoji,
 			extension.GFM,
+			meta.Meta,
 		),
 	)
 
 	if err != nil {
-		fmt.Println("Error reading: %s\n", filename)
+		log.Printf("Error reading: %s\n", filename)
 	}
 
 	var buf bytes.Buffer
-	if err = markdown.Convert(content, &buf); err != nil {
-		fmt.Println("Error!!!")
+	context := parser.NewContext()
+	if err = markdown.Convert(content, &buf, parser.WithContext(context)); err != nil {
+		log.Println("Error!!!")
 	}
+	metadata := meta.Get(context)
+	if metadata != nil {
+		log.Println(metadata["Title"])
+	}
+
 	return string(buf.Bytes())
 }
